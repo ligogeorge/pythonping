@@ -1,3 +1,4 @@
+import selectors
 import socket
 import select
 import time
@@ -64,16 +65,20 @@ class Socket:
         :return: The packet, the remote socket, and the time left before timeout
         :rtype: (bytes, tuple, float)"""
         time_left = timeout
+        sel = selectors.DefaultSelector()
+        sel.register(self.socket, selectors.EVENT_READ)
+        
         while time_left > 0:
             start_select = time.perf_counter()
-            data_ready = select.select([self.socket], [], [], time_left)
+            events = sel.select(timeout=time_left)
             elapsed_in_select = time.perf_counter() - start_select
             time_left -= elapsed_in_select
-            if not data_ready[0]:
+            if not events:
                 # Timeout
                 return b'', '', time_left
-            packet, source = self.socket.recvfrom(self.buffer_size)
-            return packet, source, time_left
+            for key, _ in events:
+                packet, source = key.fileobj.recvfrom(self.buffer_size)
+                return packet, source, time_left
 
     def __del__(self):
         try:
